@@ -10,6 +10,8 @@ import math
 import cmd
 import readline
 from default_words import default_words
+from threading import Thread, Lock
+import cProfile
 
 DEFAULT_LENGTH = 5
 
@@ -198,17 +200,22 @@ class index(object):
 class partition(object):
 
     def __init__(self, words, key):
-        self.words = set(words)
+        self.words = words
+        self.lock = Lock()
+        self.result = {}
         self.evaluate(key)
 
     def evaluate(self, key):
-        self.results = {}
+        self.result = {}
         for p in trial(key=key).possible():
-            ww = [ w for w in p.find(the_index) if w in self.words ]
+            ww = set(p.find(the_index)) & self.words
             tup = p.to_tuple()
-            self.results[tup] = len(ww)
-        total = sum(self.results.values())
-        self.entropy = -sum([ x/total * math.log(x/total) for x in self.results.values() if x>0 ])
+            self.result[tup] = len(ww)
+        self._make_entropy()
+
+    def _make_entropy(self):
+        total = sum(self.result.values())
+        self.entropy = -sum([ x/total * math.log(x/total) for x in self.result.values() if x>0 ])
 
 def old_stuff():
     length = int(sys.argv[2]) if len(sys.argv) > 2 else 0
@@ -251,17 +258,22 @@ class cli(cmd.Cmd):
         self.new_word()
         self.trials = trial_set()
         self.match = the_words
+        self.lock = Lock()
 
     def do_try(self, arg):
         'try a word against the current word, showing result'
-        t = trial(text=self.split_args(arg)[0])
+        word = self.split_args(arg)[0]
+        t = trial(text=word)
         t.compare(self.word)
         self.trials.append(t)
         self.match = self.trials.match(the_index)
-        if len(self.match) < 1000 :
-            print(f"{t} {len(self.match)} possibilities: {', '.join(self.match)}")
+        if len(self.match)==1 and word==self.word:
+            print(f"Success! The word is '{self.word}'")
         else:
-            print(f"{t} {len(self.match)} possibilities")
+            print(f"{t}")
+
+    def do_remaining(self, arg):
+        print(f"{len(self.match)} possibilities: {', '.join(sorted(self.match)[:50])}{'...' if len(self.match)>50 else ''}")
 
     def do_test(self, arg):
         'evaluate one or more matches to find the remaining words'
@@ -290,16 +302,30 @@ class cli(cmd.Cmd):
     def do_best(self, arg):
         'find the best (highest entropy) word to use right now (takes a LONG time)'
         best = (None, 0)
+        if False:
+            best = self.evaluate_best_fast()
+        else:
+            best = self.evaluate_best_slow()
+            #cProfile.runctx('b()', globals(), locals())
+        print(f"Best word is '{best[0]}', entropy = {best[1]}")
+
+    def evaluate_best_slow(self):
+        best = (None, 0)
         last_word = '!'
+        m = set(self.match)
+        good_letters = set()
+        for mm in self.match:
+            good_letters |= set(mm)
         for w in the_words:
-            if w[0]!=last_word[0]:
-                print(f"{w[0]}", end='')
-                last_word = w
-            p = partition(self.match, w)
-            if p.entropy > best[1]:
-                best = (w, p.entropy)
+            if set(w) & good_letters :
+                if w[0]!=last_word[0]:
+                    print(f"{w[0]}", end='')
+                    last_word = w
+                p = partition(m, w)
+                if p.entropy > best[1]:
+                    best = (w, p.entropy)
         print()
-        print (f"Best word is '{best[0]}', entropy = {best[1]}")
+        return best
 
     def new_word(self, word=None):
         self.word = word if word else the_words.choose()
@@ -307,6 +333,35 @@ class cli(cmd.Cmd):
 
     def split_args(self, arg):
         return arg.split()
+
+    def evaluate_best_fast(self):
+        words = set(self.match)
+        self.evaluate_result = {}
+        threads = []
+        for l in alphabet:
+            th = Thread(target=cli.evaluate_one, args=(self, words, l))
+            threads.append(th)
+            th.start()
+        for th in threads:
+            th.join()
+        best = (None, 0)
+        for l in alphabet:
+            for v in self.evaluate_result[l]:
+                if v[1] > best[1]:
+                    best = v
+        return best
+
+    def evaluate_one(self, words, letter):
+        best = (None, 0)
+        last_word = '!'
+        for w in the_words:
+            if letter is None or w.startswith(letter):
+                p = partition(words, w)
+                if p.entropy > best[1]:
+                    best = (w, p.entropy)
+        print(f'Finished {letter}')
+        with self.lock:
+            self.evaluate_result[letter] = best
 
 def main():
     global the_words, the_index, the_cli
