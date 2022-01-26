@@ -117,11 +117,11 @@ class trial_set(object):
         self.trials.append(t)
 
     def __iter__(self):
-        for t in self.trails:
+        for t in self.trials:
             yield t
 
     def __len__(self):
-        return len(self.trails)
+        return len(self.trials)
 
     def parse(self, text):
         self.trials = [trial(text=t) for t in text.split(',')]
@@ -268,7 +268,7 @@ class cli(cmd.Cmd):
         self.trials.append(t)
         self.match = self.trials.match(the_index)
         if len(self.match)==1 and word==self.word:
-            print(f"Success! The word is '{self.word}'")
+            print(f"Success! The word is '{self.word}', found in {len(self.trials)} attempts.")
         else:
             print(f"{t}")
 
