@@ -7,6 +7,8 @@ from typing import Callable
 import random
 import itertools
 import math
+import cmd
+import readline
 
 alphabet = 'abcdefghijklmnopqrstuvwxyz'
 the_words = None
@@ -237,16 +239,13 @@ def old_stuff():
     for i in range(len(counts)):
         print(f'{keys[i]} {100 * counts[keys[i]] / total:6.3f} {sorteds[i][0]} {100 * sorteds[i][1] / total:6.3f}')
 
-class cli(object):
-
-    class command:
-
-        def __init__(self, name, prefix, fn):
-            self.name, self.prefix, self.fn = name, prefix, fn
+class cli(cmd.Cmd):
+    intro = ''
+    prompt = 'wordless> '
 
     def __init__(self):
-        self._make_commands()
-        self.do_new()
+        super().__init__()
+        self.new_word()
         self.trials = trial_set()
         self.match = the_words
 
@@ -278,7 +277,7 @@ class cli(object):
         else:
             print(f"Unknown or ambiguous command '{cmd}'")
 
-    def run(self):
+    def _run(self):
         while True:
             try:
                 cmd = input("wordless> ")
@@ -286,8 +285,9 @@ class cli(object):
                 return
             self.obey(cmd)
 
-    def do_try(self, args):
-        t = trial(text=args[0])
+    def do_try(self, arg):
+        'try a word against the current word, showing result'
+        t = trial(text=self.split_args(arg)[0])
         t.compare(self.word)
         self.trials.append(t)
         self.match = self.trials.match(the_index)
@@ -296,25 +296,32 @@ class cli(object):
         else:
             print(f"{t} {len(self.match)} possibilities")
 
-    def do_test(self, args):
-        t = trial_set(text=args[0])
+    def do_test(self, arg):
+        'evaluate one or more matches to find the remaining words'
+        t = trial_set(text=self.split_args(arg)[0])
         m = t.match(the_index)
         print(f"{len(m)} possibilities: {', '.join(m)}")
 
-    def do_new(self, args=[]):
-        self.word = args[0] if args else the_words.choose()
-        #print(self.word)
-        self.trials = trial_set()
+    def do_new(self, arg):
+        'select a new random word'
+        self.new_word()
 
-    def do_set(self, args):
-        self.do_new(args)
+    def do_reveal(self, arg):
+        'show the current word'
+        print(self.word)
 
-    def do_entropy(self, args):
-        p = partition(self.match, args[0])
+    def do_set(self, arg):
+        'set the current word to a known value'
+        self.new_word(self.split_args(arg)[0])
+
+    def do_entropy(self, arg):
+        'calculate the entropy for a given word in the current state'
+        p = partition(self.match, self.split_args(arg)[0])
         print('\n'.join([f'{str(pk):30} {pl}' for pk,pl in p.results.items() if pl>0]))
         print(f'entropy = {p.entropy}')
 
-    def do_best(self, args):
+    def do_best(self, arg):
+        'find the best (highest entropy) word to use right now (takes a LONG time)'
         best = (None, 0)
         last_word = '!'
         for w in the_words:
@@ -327,6 +334,13 @@ class cli(object):
         print()
         print (f"Best word is '{best[0]}', entropy = {best[1]}")
 
+    def new_word(self, word=None):
+        self.word = word if word else the_words.choose()
+        self.trials = trial_set()
+
+    def split_args(self, arg):
+        return arg.split()
+
 def main():
     global the_words, the_index, the_cli
     random.seed()
@@ -334,6 +348,6 @@ def main():
     the_words.load_file(sys.argv[1])
     the_index = index(the_words)
     the_cli = cli()
-    the_cli.run()
+    the_cli.cmdloop()
 
 main()
