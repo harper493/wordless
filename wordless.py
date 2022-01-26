@@ -9,6 +9,9 @@ import itertools
 import math
 import cmd
 import readline
+from default_words import default_words
+
+DEFAULT_LENGTH = 5
 
 alphabet = 'abcdefghijklmnopqrstuvwxyz'
 the_words = None
@@ -249,42 +252,6 @@ class cli(cmd.Cmd):
         self.trials = trial_set()
         self.match = the_words
 
-    def _make_commands(self):
-        self.commands = []
-        names = {}
-        for c in dir(self):
-            if c.startswith('do_'):
-                names[c[3:]] = 0
-        for n1 in names.keys():
-            for n2 in names.keys():
-                if n1!=n2:
-                    for i in range(min(len(n1), len(n2))):
-                        if n1[i]!=n2[i] and i>names[n1]:
-                            names[n1] = i
-                            break
-        for n, l in names.items():
-            f = getattr(self, 'do_'+n, None)
-            c = cli.command(n, n[:i], f)
-            self.commands.append(c)
-
-    def obey(self, line):
-        args = line.split()
-        cmd = args[0]
-        for c in self.commands:
-            if cmd.startswith(c.prefix) and c.name.startswith(cmd):
-                c.fn(args[1:])
-                break
-        else:
-            print(f"Unknown or ambiguous command '{cmd}'")
-
-    def _run(self):
-        while True:
-            try:
-                cmd = input("wordless> ")
-            except:
-                return
-            self.obey(cmd)
-
     def do_try(self, arg):
         'try a word against the current word, showing result'
         t = trial(text=self.split_args(arg)[0])
@@ -344,8 +311,11 @@ class cli(cmd.Cmd):
 def main():
     global the_words, the_index, the_cli
     random.seed()
-    the_words = words(length=int(sys.argv[2]) if len(sys.argv) >= 2 else 0)
-    the_words.load_file(sys.argv[1])
+    the_words = words(length=int(sys.argv[2]) if len(sys.argv) >= 2 else DEFAULT_LENGTH)
+    if len(sys.argv) > 1:
+        the_words.load_file(sys.argv[1])
+    else:
+        the_words.load(default_words.split('\n'))
     the_index = index(the_words)
     the_cli = cli()
     the_cli.cmdloop()
